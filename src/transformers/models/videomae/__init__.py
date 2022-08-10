@@ -36,6 +36,7 @@ else:
         "VideoMAEModel",
         "VideoMAEPreTrainedModel",
         "VideoMAEForVideoClassification",
+        "VideoMAEForVideoClassification_my_model",
     ]
 
 try:
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
             VideoMAEForVideoClassification,
+            VideoMAEForVideoClassification_my_model,
             VideoMAEModel,
             VideoMAEPreTrainedModel,
         )

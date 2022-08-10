@@ -1881,6 +1881,7 @@ else:
             "VideoMAEModel",
             "VideoMAEPreTrainedModel",
             "VideoMAEForVideoClassification",
+            "VideoMAEForVideoClassification_my_model",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -4358,6 +4359,7 @@ if TYPE_CHECKING:
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
             VideoMAEForVideoClassification,
+            VideoMAEForVideoClassification_my_model,
             VideoMAEModel,
             VideoMAEPreTrainedModel,
         )
