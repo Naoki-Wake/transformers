@@ -50,7 +50,7 @@ fp_video_unlabeled_right = [y for x in os.walk(video_root_unlabeled_right) for y
 fn_video_unlabeled_right =  [osp.basename(x) for x in fp_video_unlabeled_right]
 video_root_unlabeled_left = '/home/nawake/sthv2/unlabeled_split_videos/Keyframe/left_hand'
 fp_video_unlabeled_left = [y for x in os.walk(video_root_unlabeled_left) for y in glob(os.path.join(x[0], '*.mp4'))]
-fn_video_yunlabeled_left=  [osp.basename(x) for x in fp_video_unlabeled_left]
+fn_video_unlabeled_left=  [osp.basename(x) for x in fp_video_unlabeled_left]
 
 
 
