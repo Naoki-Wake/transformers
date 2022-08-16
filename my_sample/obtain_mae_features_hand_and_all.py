@@ -1,3 +1,5 @@
+# アノテーションファイルを読み、クロップ前の動画に対して左右のクロップをかけ、クロップ後の動画を取得する。
+# さらに、発展的には、クロップ前の動画に一般物体認識をかける。
 import numpy as np
 from decord import VideoReader, cpu
 import torch
@@ -7,7 +9,7 @@ import os.path as osp
 import os
 import pandas as pd
 import tqdm as tqdm
-
+from glob import glob
 feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
 model = VideoMAEForVideoClassification_my_model.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
 
@@ -36,6 +38,21 @@ def get_feat(fp_video):
     with torch.no_grad():
         feat = model(**inputs)
     return feat
+
+# obtain original file paths
+# Yamamoto annotation files
+video_root_yamamoto_annotation = '/home/nawake/sthv2/videos'
+fp_video_yamamoto_annotation = [y for x in os.walk(video_root_yamamoto_annotation) for y in glob(os.path.join(x[0], '*.mp4'))]
+fn_video_yamamoto_annotation =  [osp.basename(x) for x in fp_video_yamamoto_annotation]
+# unlabeled videos
+video_root_unlabeled_right = '/home/nawake/sthv2/unlabeled_split_videos/Keyframe/right_hand'
+fp_video_unlabeled_right = [y for x in os.walk(video_root_unlabeled_right) for y in glob(os.path.join(x[0], '*.mp4'))]
+fn_video_unlabeled_right =  [osp.basename(x) for x in fp_video_unlabeled_right]
+video_root_unlabeled_left = '/home/nawake/sthv2/unlabeled_split_videos/Keyframe/left_hand'
+fp_video_unlabeled_left = [y for x in os.walk(video_root_unlabeled_left) for y in glob(os.path.join(x[0], '*.mp4'))]
+fn_video_yunlabeled_left=  [osp.basename(x) for x in fp_video_unlabeled_left]
+
+
 
 dataroot='/home/nawake/sthv2/'
 annotation_root='/home/nawake/sthv2/annotations/with_pseudo_largedatanum'

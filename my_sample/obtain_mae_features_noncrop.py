@@ -42,7 +42,7 @@ annotation_root='/home/nawake/sthv2/annotations/with_pseudo_largedatanum'
 fp_annotation_train = osp.join(annotation_root, 'breakfast_train_list_videos.txt')
 fp_annotation_test = osp.join(annotation_root, 'breakfast_test_list_videos.txt')
 fp_annotation_val = osp.join(annotation_root, 'breakfast_val_list_videos.txt')
-out_dir = osp.join(dataroot, 'videomae/hand_crop_right')
+out_dir = osp.join(dataroot, 'videomae/without_crop')
 if not osp.exists(out_dir):
     os.makedirs(out_dir)
 
@@ -53,8 +53,8 @@ fp_video_list = []
 print('start extracting features')
 for i in tqdm.tqdm(range(len(file_list_test))):
     fp_video = osp.join(dataroot, file_list_test[0][i])
-    annotation = file_list_test[1][i]
     import pdb; pdb.set_trace()
+    annotation = file_list_test[1][i]
     feat.append(get_feat(fp_video).numpy())
     label.append(annotation)
     fp_video_list.append(fp_video)
