@@ -5,13 +5,11 @@ import os.path as osp
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from torch.utils.data import TensorDataset
 from torchvision import datasets, transforms
 import dataset
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import json
 import numpy as np
-import pickle
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
@@ -109,14 +107,15 @@ def test_loop(dataloader, model, loss_fn):
     correct /= size
     accuracies = accuracy(pred, y, topk=(1,3,5))
     accuracies = [a.item() for a in accuracies]
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: 
+    {test_loss:>8f} \n")
     # import pdb; pdb.set_trace()
     return accuracies
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, input_len=768):
+    def __init__(self):
         super(NeuralNetwork, self).__init__()
-        self.classifier = nn.Linear(input_len, 11)
+        self.classifier = nn.Linear(768, 11)
 
     def forward(self, x):
         # remobe the dimension
@@ -142,77 +141,40 @@ if __name__ == '__main__':
     learning_rate = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5]
     batch_size = 100
     epochs = 50
-    #mode = 'whole+dominant'
-    mode = 'dominant'
-    if mode == 'whole+dominant':
-        model = NeuralNetwork(input_len=1536).to(device)
-    else:
-        model = NeuralNetwork(input_len=768).to(device)
 
+    model = NeuralNetwork().to(device)
     #model = NeuralNetwork_2().to(device)
     print(model)
     dataroot='/home/nawake/sthv2/'
-    out_dir = osp.join(dataroot, 'videomae/features_comprehensive')
-    # load data
-    with open(osp.join(out_dir, 'dict_feat_train.pkl'), 'rb') as f:
-        dict_feat = pickle.load(f)
-        feature = []
-        label = []
-        for key in dict_feat:
-            if mode == 'whole':
-                feature.append(dict_feat[key]['feat_whole'])
-            elif mode == 'dominant':
-               feature.append(dict_feat[key]['feat_dominant'])
-            elif mode == 'whole+dominant':
-                # concatenate dominant and whole features
-                feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
-            label.append(dict_feat[key]['label'])
-        feature = np.array(feature)
-        label = np.array(label)
-    training_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
+    #out_dir = osp.join(dataroot, 'videomae/hand_crop_right')
+    out_dir = osp.join(dataroot, 'videomae/wo_pseudo_hand_crop_right')
+    
+    fp_data = osp.join(out_dir, 'feat_train.npy')
+    fp_label = osp.join(out_dir, 'label_train.npy')
+    training_data = dataset.prepare_dataset(fp_data, fp_label)
     train_dataloader = DataLoader(training_data, batch_size=batch_size)
-    labels = list(label)
+
+    #annotation_root='/home/nawake/sthv2/annotations/with_pseudo_largedatanum'
+    annotation_root='/home/nawake/sthv2/annotations/wo_pseudo'
+    fp_annotation_train = osp.join(annotation_root, 'breakfast_train_list_videos.txt')
+    with open(fp_annotation_train, 'r') as f:
+        lines = f.readlines()
+    labels = [int(item.split(' ')[1].strip()) for item in lines]
     class_num = len(list(set(labels)))
     class_bias = [labels.count(i) for i in range(class_num)]
     class_bias = np.array(class_bias)
     class_bias = class_bias/np.sum(class_bias)
     logP = torch.from_numpy(np.log(class_bias))
     logP = logP.to(device)
-    # import pdb; pdb.set_trace()
-    with open(osp.join(out_dir, 'dict_feat_val.pkl'), 'rb') as f:
-        dict_feat = pickle.load(f)
-        feature = []
-        label = []
-        for key in dict_feat:
-            if mode == 'whole':
-                feature.append(dict_feat[key]['feat_whole'])
-            elif mode == 'dominant':
-               feature.append(dict_feat[key]['feat_dominant'])
-            elif mode == 'whole+dominant':
-                # concatenate dominant and whole features
-                feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
-            label.append(dict_feat[key]['label'])
-        feature = np.array(feature)
-        label = np.array(label)
-    validation_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
+    #import pdb; pdb.set_trace()
+    fp_data = osp.join(out_dir, 'feat_val.npy')
+    fp_label = osp.join(out_dir, 'label_val.npy')
+    validation_data = dataset.prepare_dataset(fp_data, fp_label)
     validation_dataloader = DataLoader(validation_data, batch_size=batch_size)
 
-    with open(osp.join(out_dir, 'dict_feat_test.pkl'), 'rb') as f:
-        dict_feat = pickle.load(f)
-        feature = []
-        label = []
-        for key in dict_feat:
-            if mode == 'whole':
-                feature.append(dict_feat[key]['feat_whole'])
-            elif mode == 'dominant':
-                feature.append(dict_feat[key]['feat_dominant'])
-            elif mode == 'whole+dominant':
-                # concatenate dominant and whole features
-                feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
-            label.append(dict_feat[key]['label'])
-        feature = np.array(feature)
-        label = np.array(label)
-    test_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
+    fp_data = osp.join(out_dir, 'feat_test.npy')
+    fp_label = osp.join(out_dir, 'label_test.npy')
+    test_data = dataset.prepare_dataset(fp_data, fp_label)
     test_dataloader = DataLoader(test_data, batch_size=len(test_data))
 
     loss_fn = nn.CrossEntropyLoss()
