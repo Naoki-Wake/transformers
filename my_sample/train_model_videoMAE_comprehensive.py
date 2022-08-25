@@ -91,27 +91,27 @@ def train_loop(dataloader, model, loss_fn, optimizer, scheduler, logP):
             loss.backward()
             optimizer.step()
             loss, current = loss.item(), batch * len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            # print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
             scheduler.step()
 
 def test_loop(dataloader, model, loss_fn):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     test_loss, correct = 0, 0
-
+    pred_all, y_all = [], []
     with torch.no_grad():
-        for X, y in dataloader:
-            pred = model(X)
+        for x_mae, y in dataloader:
+            pred = model(x_mae)
             test_loss += loss_fn(pred, y).item()
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-
+            pred_all.append(pred)
+            y_all.append(y)
     test_loss /= num_batches
     correct /= size
-    accuracies = accuracy(pred, y, topk=(1,3,5))
+    accuracies = accuracy(torch.cat(pred_all), torch.cat(y_all), topk=(1,3,5))
     accuracies = [a.item() for a in accuracies]
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
-    # import pdb; pdb.set_trace()
-    return accuracies
+    return accuracies, test_loss
 
 class NeuralNetwork(nn.Module):
     def __init__(self, input_len=768):
@@ -139,107 +139,144 @@ class NeuralNetwork_2(nn.Module):
 
 if __name__ == '__main__':
     results = {}
+    results_best_all = {}
     learning_rate = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5]
     batch_size = 100
-    epochs = 50
-    mode = 'dominant'
-    #mode = 'dominant'
-    if mode == 'whole+dominant':
-        model = NeuralNetwork(input_len=1536).to(device)
-    else:
-        model = NeuralNetwork(input_len=768).to(device)
+    epochs = 500
+    modes = ['whole', 'dominant', 'whole+dominant']
+    modes = ['dominant', 'whole+dominant']
+    for mode in modes:
+        dataroot='/home/nawake/sthv2/'
+        #out_dir = osp.join(dataroot, 'videomae/features_comprehensive/features_videoMAE')
+        out_dir = osp.join(dataroot, 'videomae/features_comprehensive/features_MAE_with_LayerNorm')
+        #out_dir = osp.join(dataroot, 'videomae/features_comprehensive/features_MAE')
+        # load data
+        with open(osp.join(out_dir, 'dict_feat_train.pkl'), 'rb') as f:
+            dict_feat = pickle.load(f)
+            feature = []
+            label = []
+            for key in dict_feat:
+                if mode == 'whole':
+                    feature.append(dict_feat[key]['feat_whole'])
+                elif mode == 'dominant':
+                    feature.append(dict_feat[key]['feat_dominant'])
+                elif mode == 'whole+dominant':
+                    # concatenate dominant and whole features
+                    feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
+                label.append(dict_feat[key]['label'])
+            feature = np.array(feature)
+            label = np.array(label)
+        training_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
+        train_dataloader = DataLoader(training_data, batch_size=batch_size)
+        labels = list(label)
+        class_num = len(list(set(labels)))
+        class_bias = [labels.count(i) for i in range(class_num)]
+        class_bias = np.array(class_bias)
+        class_bias = class_bias/np.sum(class_bias)
+        logP = torch.from_numpy(np.log(class_bias))
+        logP = logP.to(device)
+        # import pdb; pdb.set_trace()
+        with open(osp.join(out_dir, 'dict_feat_val.pkl'), 'rb') as f:
+            dict_feat = pickle.load(f)
+            feature = []
+            label = []
+            for key in dict_feat:
+                if mode == 'whole':
+                    feature.append(dict_feat[key]['feat_whole'])
+                elif mode == 'dominant':
+                    feature.append(dict_feat[key]['feat_dominant'])
+                elif mode == 'whole+dominant':
+                    # concatenate dominant and whole features
+                    feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
+                label.append(dict_feat[key]['label'])
+            feature = np.array(feature)
+            label = np.array(label)
+        validation_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
+        validation_dataloader = DataLoader(validation_data, batch_size=batch_size)
 
-    #model = NeuralNetwork_2().to(device)
-    print(model)
-    dataroot='/home/nawake/sthv2/'
-    out_dir = osp.join(dataroot, 'videomae/features_comprehensive/features_videoMAE')
-    # load data
-    with open(osp.join(out_dir, 'dict_feat_train.pkl'), 'rb') as f:
-        dict_feat = pickle.load(f)
-        feature = []
-        label = []
-        for key in dict_feat:
-            if mode == 'whole':
-                feature.append(dict_feat[key]['feat_whole'])
-            elif mode == 'dominant':
-               feature.append(dict_feat[key]['feat_dominant'])
-            elif mode == 'whole+dominant':
-                # concatenate dominant and whole features
-                feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
-            label.append(dict_feat[key]['label'])
-        feature = np.array(feature)
-        label = np.array(label)
-    training_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
-    train_dataloader = DataLoader(training_data, batch_size=batch_size)
-    labels = list(label)
-    class_num = len(list(set(labels)))
-    class_bias = [labels.count(i) for i in range(class_num)]
-    class_bias = np.array(class_bias)
-    class_bias = class_bias/np.sum(class_bias)
-    logP = torch.from_numpy(np.log(class_bias))
-    logP = logP.to(device)
-    # import pdb; pdb.set_trace()
-    with open(osp.join(out_dir, 'dict_feat_val.pkl'), 'rb') as f:
-        dict_feat = pickle.load(f)
-        feature = []
-        label = []
-        for key in dict_feat:
-            if mode == 'whole':
-                feature.append(dict_feat[key]['feat_whole'])
-            elif mode == 'dominant':
-               feature.append(dict_feat[key]['feat_dominant'])
-            elif mode == 'whole+dominant':
-                # concatenate dominant and whole features
-                feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
-            label.append(dict_feat[key]['label'])
-        feature = np.array(feature)
-        label = np.array(label)
-    validation_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
-    validation_dataloader = DataLoader(validation_data, batch_size=batch_size)
+        with open(osp.join(out_dir, 'dict_feat_test.pkl'), 'rb') as f:
+            dict_feat = pickle.load(f)
+            feature = []
+            label = []
+            for key in dict_feat:
+                if mode == 'whole':
+                    feature.append(dict_feat[key]['feat_whole'])
+                elif mode == 'dominant':
+                    feature.append(dict_feat[key]['feat_dominant'])
+                elif mode == 'whole+dominant':
+                    # concatenate dominant and whole features
+                    feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
+                label.append(dict_feat[key]['label'])
+            feature = np.array(feature)
+            label = np.array(label)
+        test_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
+        test_dataloader = DataLoader(test_data, batch_size=len(test_data))
 
-    with open(osp.join(out_dir, 'dict_feat_test.pkl'), 'rb') as f:
-        dict_feat = pickle.load(f)
-        feature = []
-        label = []
-        for key in dict_feat:
-            if mode == 'whole':
-                feature.append(dict_feat[key]['feat_whole'])
-            elif mode == 'dominant':
-                feature.append(dict_feat[key]['feat_dominant'])
-            elif mode == 'whole+dominant':
-                # concatenate dominant and whole features
-                feature.append(np.concatenate((dict_feat[key]['feat_whole'], dict_feat[key]['feat_dominant']), axis=1))
-            label.append(dict_feat[key]['label'])
-        feature = np.array(feature)
-        label = np.array(label)
-    test_data = TensorDataset(torch.from_numpy(feature).to(device), torch.from_numpy(label).to(device))
-    test_dataloader = DataLoader(test_data, batch_size=len(test_data))
+        for lr in learning_rate:
+            if mode == 'whole+dominant':
+                model = NeuralNetwork(input_len=1536).to(device)
+            else:
+                model = NeuralNetwork(input_len=768).to(device)
+            print(model)
+            loss_fn = nn.CrossEntropyLoss()  
+            optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
+            print('Done preparation')
+            the_last_loss = 1e10
+            patience = 5
+            accuracies_epoch = []
+            losses_epoch = []
+            for t in range(epochs):
+                print(f"Epoch {t+1}\n-------------------------------")
+                train_loop(train_dataloader, model, loss_fn, optimizer, scheduler, logP)
+                accuracies, the_current_loss = test_loop(test_dataloader, model, loss_fn)
+                accuracies_epoch.append(accuracies)
+                losses_epoch.append(the_current_loss)
+                # Early stopping
+                if the_current_loss > the_last_loss:
+                    trigger_times += 1
+                    print('trigger times:', trigger_times)
+                    if trigger_times >= patience:
+                        print('Early stopping!\nStart to test process.')
+                        break
+                else:
+                    print('trigger times: 0')
+                    trigger_times = 0
 
-    loss_fn = nn.CrossEntropyLoss()
+                the_last_loss = the_current_loss
 
-    
-    for lr in learning_rate:
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
-        print('Done preparation')
-        #train_features, train_labels = next(iter(dataloader))
-        #print(f"Feature batch shape: {train_features.size()}")
-        #print(f"Labels batch shape: {train_labels.size()}")
-        #logits = model(train_features)
-        #pred_probab = nn.Softmax(dim=1)(logits)
-        ##loss = torch.nn.functional.binary_cross_entropy_with_logits(z, y)
-        #y_pred = pred_probab.argmax(1)
-        #print(logits)
-        #print(f"Predicted class: {y_pred}")
-        for t in range(epochs):
-            print(f"Epoch {t+1}\n-------------------------------")
-            train_loop(train_dataloader, model, loss_fn, optimizer, scheduler, logP)
-            test_loop(test_dataloader, model, loss_fn)
-        print("Done!")
-        accuracies = test_loop(test_dataloader, model, loss_fn)
-        results[lr] = accuracies
-        #torch.save(model, PATH)
-    # save results to a file
-    print(results)
-    with open(osp.join(out_dir, 'results_twolayers.json'), 'w') as f:
-        json.dump(results, f, indent=4)
+            print("Done!")
+            results[lr] = {'accuracies': np.array(accuracies_epoch), 'loss': losses_epoch}
+            #torch.save(model, PATH)
+        # save results to a file
+        # draw the curves
+        # left* accuarcy, right* loss row* learning rate
+        import matplotlib.pyplot as plt
+        fig, axs = plt.subplots(len(learning_rate), 2, figsize=(15,10*len(learning_rate)))
+        for i in range(len(learning_rate)):
+            lr = learning_rate[i]
+            label = ['top1', 'top3', 'top5']
+            #import pdb; pdb.set_trace()
+            axs[i,0].plot(results[lr]['accuracies'], label=label)
+            axs[i,1].plot(results[lr]['loss'])
+            axs[i,0].legend()
+            axs[i,1].legend()
+            axs[i,0].set_title('Accuracy')
+            axs[i,1].set_title('Loss')
+            axs[i,0].set_xlabel('epoch')
+            axs[i,1].set_xlabel('epoch')
+            axs[i,0].set_ylabel('accuracy:LR_{}'.format(lr))
+            axs[i,1].set_ylabel('loss:LR_{}'.format(lr))
+        # tight layout
+        plt.tight_layout()
+        fig.savefig(f'fig/{mode}_MAE.png')
+        plt.close(fig)
+        results_best = {}
+        for lr in learning_rate:
+            tmp_acc = results[lr]['accuracies']
+            # find where the first column is the best
+            # import pdb; pdb.set_trace()
+            best_epoch = np.argmax(tmp_acc[:,0])
+            results_best[lr] = tmp_acc[best_epoch]
+        results_best_all[mode] = results_best
+    print(results_best_all)
