@@ -339,7 +339,7 @@ if __name__ == '__main__':
             axs[i,1].set_ylabel('loss:LR_{}'.format(lr))
         # tight layout
         plt.tight_layout()
-        fig.savefig(f'fig/{mode}_MAE.png')
+        fig.savefig(f'fig/{mode}_MAE_TSM.png')
         plt.close(fig)
         results_best = {}
         for lr in learning_rate:
@@ -348,4 +348,6 @@ if __name__ == '__main__':
             # import pdb; pdb.set_trace()
             best_epoch = np.argmax(tmp_acc[:,0])
             results_best[lr] = tmp_acc[best_epoch]
-        print(results_best)
+        #print(results_best)
+        results_best_all[mode] = results_best
+    print(results_best_all)

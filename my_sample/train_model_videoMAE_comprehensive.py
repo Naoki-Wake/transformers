@@ -144,7 +144,7 @@ if __name__ == '__main__':
     batch_size = 100
     epochs = 500
     modes = ['whole', 'dominant', 'whole+dominant']
-    modes = ['dominant', 'whole+dominant']
+    #modes = ['dominant', 'whole+dominant']
     for mode in modes:
         dataroot='/home/nawake/sthv2/'
         #out_dir = osp.join(dataroot, 'videomae/features_comprehensive/features_videoMAE')
