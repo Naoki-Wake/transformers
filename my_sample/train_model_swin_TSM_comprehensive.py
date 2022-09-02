@@ -145,16 +145,16 @@ def normalize_np(vector):
 if __name__ == '__main__':
     results = {}
     results_best_all = {}
-    learning_rate = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
+    learning_rate = [1e-2, 1e-4]#[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
     batch_size = 100
     epochs = 500
     #mode = 'whole+dominant+opposite'
     #mode = 'dominant'
     modes = ['whole', 'dominant', 'whole+dominant', 'dominant+opposite', 'whole+dominant+opposite']
-    modes = ['dominant']
+    #modes = ['whole+dominant']
     for mode in modes:
         dataroot='/home/nawake/sthv2/'
-        out_dir_MAE = osp.join(dataroot, 'videomae/features_comprehensive/features_MAE_with_LayerNorm')
+        out_dir_MAE = osp.join(dataroot, 'videomae/features_comprehensive/features_SWIN')
         out_dir_TSM = osp.join(dataroot, 'videomae/features_comprehensive/features_TSM')
         # load data
         with open(osp.join(out_dir_MAE, 'dict_feat_train.pkl'), 'rb') as f:
@@ -173,12 +173,16 @@ if __name__ == '__main__':
                     feature.append(normalize_np(dict_feat_TSM[key]['feat_dominant']))
                 elif mode == 'whole+dominant':
                     # concatenate dominant and whole features
-                    feature.append(np.concatenate((dict_feat_MAE[key]['feat_whole'], normalize_np(dict_feat_TSM[key]['feat_dominant'])), axis=1))
+                    vec = dict_feat_MAE[key]['feat_whole']
+                    vec = vec[None, :]
+                    feature.append(np.concatenate((vec, normalize_np(dict_feat_TSM[key]['feat_dominant'])), axis=1))
                 elif mode == 'whole+dominant+opposite':
                     # concatenate dominant and whole features
                     if 'feat_opposite' not in dict_feat_TSM_with_opposite[key].keys():
                         continue
-                    feature.append(np.concatenate((dict_feat_MAE[key]['feat_whole'], normalize_np(dict_feat_TSM[key]['feat_dominant']), normalize_np(dict_feat_TSM_with_opposite[key]['feat_opposite'])), axis=1))
+                    vec = dict_feat_MAE[key]['feat_whole']
+                    vec = vec[None, :]
+                    feature.append(np.concatenate((vec, normalize_np(dict_feat_TSM[key]['feat_dominant']), normalize_np(dict_feat_TSM_with_opposite[key]['feat_opposite'])), axis=1))
                 elif mode == 'dominant+opposite':
                     # concatenate dominant and whole features
                     if 'feat_opposite' not in dict_feat_TSM_with_opposite[key].keys():
@@ -219,12 +223,16 @@ if __name__ == '__main__':
                     feature.append(normalize_np(dict_feat_TSM[key]['feat_dominant']))
                 elif mode == 'whole+dominant':
                     # concatenate dominant and whole features
-                    feature.append(np.concatenate((dict_feat_MAE[key]['feat_whole'], normalize_np(dict_feat_TSM[key]['feat_dominant'])), axis=1))
+                    vec = dict_feat_MAE[key]['feat_whole']
+                    vec = vec[None, :]
+                    feature.append(np.concatenate((vec, normalize_np(dict_feat_TSM[key]['feat_dominant'])), axis=1))
                 elif mode == 'whole+dominant+opposite':
                     # concatenate dominant and whole features
                     if 'feat_opposite' not in dict_feat_TSM_with_opposite[key].keys():
                         continue
-                    feature.append(np.concatenate((dict_feat_MAE[key]['feat_whole'], normalize_np(dict_feat_TSM[key]['feat_dominant']), normalize_np(dict_feat_TSM_with_opposite[key]['feat_opposite'])), axis=1))
+                    vec = dict_feat_MAE[key]['feat_whole']
+                    vec = vec[None, :]
+                    feature.append(np.concatenate((vec, normalize_np(dict_feat_TSM[key]['feat_dominant']), normalize_np(dict_feat_TSM_with_opposite[key]['feat_opposite'])), axis=1))
                 elif mode == 'dominant+opposite':
                     # concatenate dominant and whole features
                     if 'feat_opposite' not in dict_feat_TSM_with_opposite[key].keys():
@@ -253,12 +261,16 @@ if __name__ == '__main__':
                     feature.append(normalize_np(dict_feat_TSM[key]['feat_dominant']))
                 elif mode == 'whole+dominant':
                     # concatenate dominant and whole features
-                    feature.append(np.concatenate((dict_feat_MAE[key]['feat_whole'], normalize_np(dict_feat_TSM[key]['feat_dominant'])), axis=1))
+                    vec = dict_feat_MAE[key]['feat_whole']
+                    vec = vec[None, :]
+                    feature.append(np.concatenate((vec, normalize_np(dict_feat_TSM[key]['feat_dominant'])), axis=1))
                 elif mode == 'whole+dominant+opposite':
                     # concatenate dominant and whole features
                     if 'feat_opposite' not in dict_feat_TSM_with_opposite[key].keys():
                         continue
-                    feature.append(np.concatenate((dict_feat_MAE[key]['feat_whole'], normalize_np(dict_feat_TSM[key]['feat_dominant']), normalize_np(dict_feat_TSM_with_opposite[key]['feat_opposite'])), axis=1))
+                    vec = dict_feat_MAE[key]['feat_whole']
+                    vec = vec[None, :]
+                    feature.append(np.concatenate((vec, normalize_np(dict_feat_TSM[key]['feat_dominant']), normalize_np(dict_feat_TSM_with_opposite[key]['feat_opposite'])), axis=1))
                 elif mode == 'dominant+opposite':
                     # concatenate dominant and whole features
                     if 'feat_opposite' not in dict_feat_TSM_with_opposite[key].keys():
@@ -340,7 +352,7 @@ if __name__ == '__main__':
             axs[i,1].set_ylabel('loss:LR_{}'.format(lr))
         # tight layout
         plt.tight_layout()
-        fig.savefig(f'fig/{mode}_MAE_TSM.png')
+        fig.savefig(f'fig/{mode}_swin_TSM.png')
         plt.close(fig)
         results_best = {}
         for lr in learning_rate:
