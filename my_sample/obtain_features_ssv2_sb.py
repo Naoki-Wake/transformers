@@ -76,20 +76,56 @@ video_root = args.video_root
 fp_annotation = args.fp_annotation
 dir_out = args.dir_out
 
+fp_cohesion = fp_annotation.replace('something-something-v2-train.json', 'cohesion_label.csv')
+df = pd.read_csv(fp_cohesion)
+phrases = df['ssv2label']
+flag = df['is_manipulation']
+skip_phrases = phrases[flag == 'None']
+import re
+skip_phrases = [re.findall('[A-Z][^A-Z]*', i) for i in skip_phrases]
+skip_phrases = [' '.join(item) for item in skip_phrases] 
+skip_phrases = [item.lower().capitalize()
+  for item in skip_phrases]
+skip_phrases = [item.replace('_',' ')
+  for item in skip_phrases]
+skip_phrases = [item.replace('  ',' ')
+  for item in skip_phrases]
+#phrases = list(set(phrases))
+
+#skip_phrases = ['tilting''tipping','touching','trying','Tturning', 'uncovering','unfolding']
 # filelist
 with open(fp_annotation, "r") as f:
     annotation = json.load(f)
 fp_videos = [osp.join(video_root, y['id']+'.webm') for y in annotation]
+str_annotations = [ y['template'].replace('[','').replace(']','').replace(',','').replace('\'',' ').replace('(','').replace(')','') for y in annotation]
+
+# Debugging label parsing
+#for i in str_annotations:
+#    if i not in skip_phrases:
+#        print('label error')
+#        included = False
+#        count = 0
+#        for j in skip_phrases:
+#            if j in i:
+#                included = True
+#                count +=1
+#        if included == False:
+#            print('content error')
+#        if count !=1:
+#            print('count error')
 
 calculated_list = os.listdir(dir_out)
 fp_videos_multithread = []
-for video in fp_videos:
-    out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
-    #pdb.set_trace()
-    if osp.basename(out_name) not in calculated_list:
-        fp_videos_multithread.append(video)
-#pdb.set_trace()        
+for video, item_annotation in zip(fp_videos,str_annotations):
+    if item_annotation not in skip_phrases:
+        out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
+        #pdb.set_trace()
+        if osp.basename(out_name) not in calculated_list:
+            fp_videos_multithread.append(video)
+# pdb.set_trace()        
 # extract feature and save
+import random
+random.shuffle(fp_videos_multithread)
 for video in tqdm.tqdm(fp_videos_multithread):
     out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
     #calculated_list = os.listdir(dir_out)
