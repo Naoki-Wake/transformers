@@ -13,14 +13,14 @@ import pickle
 from transformers import logging
 logging.set_verbosity_error()
 import json
-
+import asyncio
 import pdb
 
 feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-ssv2")
 model = VideoMAEForVideoClassification_my_model.from_pretrained("MCG-NJU/videomae-base-ssv2")
-#device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-#print("Device : ", device)
-device = "cpu"
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+print("Device : ", device)
+#device = "cpu"
 model = model.to(device)
 # assuming that the video is first resized and then cropped
 assert feature_extractor.do_resize == True
@@ -56,7 +56,7 @@ def get_feat(fp_video):
     # create a list of NumPy arrays
     video = [buffer[i] for i in range(buffer.shape[0])]
     inputs = feature_extractor(video, return_tensors="pt")
-    #inputs = inputs.to(device)
+    inputs = inputs.to(device)
     with torch.no_grad():
         feat = model(**inputs)
     return feat
@@ -66,16 +66,17 @@ video_root = '/home/ubuntu18/blobstrage/ssv2/dataset/videos'
 fp_annotation = '/home/ubuntu18/blobstrage/ssv2/dataset/annotations/something-something-v2-train.json'
 dir_out = '/home/ubuntu18/blobstrage/ssv2/dataset/features/videoMAE'
 
+loop = asyncio.get_event_loop()
 
 # filelist
 with open(fp_annotation, "r") as f:
     annotation = json.load(f)
 fp_videos = [osp.join(video_root, y['id']+'.webm') for y in annotation]
-calculated_list = os.listdir(dir_out)
 
 # extract feature and save
-for video in fp_videos:
+for video in tqdm.tqdm(fp_videos):
     out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
+    calculated_list = os.listdir(dir_out)
     if out_name not in calculated_list:
         feat = get_feat(video)
         np.save(out_name, feat.numpy())
