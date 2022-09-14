@@ -92,4 +92,4 @@ for video in tqdm.tqdm(fp_videos_multithread):
     else:
         print('file skipped:')
     print(out_name)
-    print('number of files left: '+str(len(calculated_list)))
+    print('number of files wrote: '+str(len(os.listdir(dir_out))))
