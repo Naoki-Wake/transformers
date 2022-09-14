@@ -77,10 +77,10 @@ calculated_list = os.listdir(dir_out)
 fp_videos_multithread = []
 for video in fp_videos:
     out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
-    pdb.set_trace()
+    #pdb.set_trace()
     if osp.basename(out_name) not in calculated_list:
         fp_videos_multithread.append(video)
-pdb.set_trace()        
+#pdb.set_trace()        
 # extract feature and save
 for video in tqdm.tqdm(fp_videos_multithread):
     out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
