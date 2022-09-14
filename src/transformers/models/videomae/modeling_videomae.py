@@ -1133,9 +1133,10 @@ class VideoMAEForVideoClassification_my_model(VideoMAEPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = outputs[0]
-        return sequence_output.mean(1)
-        #if self.fc_norm is not None:
-        #    sequence_output = self.fc_norm#(sequence_output.mean(1))
-        #else:
-        #    sequence_output = sequence_output[:, 0]
-        #return sequence_output
+        #import pdb; pdb.set_trace()
+        #return sequence_output.mean(1)
+        if self.fc_norm is not None:
+            sequence_output = self.fc_norm(sequence_output.mean(1))
+        else:
+            sequence_output = sequence_output[:, 0]
+        return sequence_output

@@ -157,6 +157,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None:
             videos = [self.resize_video(video, size=self.size, resample=self.resample) for video in videos]
+        #import pdb;pdb.set_trace()
         if self.do_center_crop and self.size is not None:
             videos = [self.crop_video(video, size=self.size) for video in videos]
         if self.do_normalize:
