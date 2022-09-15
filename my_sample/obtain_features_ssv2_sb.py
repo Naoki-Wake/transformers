@@ -1,8 +1,18 @@
 # something-something-v2でプリトレイン済みのモデルではなく、ベースのモデルを使う。
 import numpy as np
-from decord import VideoReader, cpu
 import torch
 from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification_my_model
+model = VideoMAEForVideoClassification_my_model.from_pretrained("MCG-NJU/videomae-base-ssv2")
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+print("Device : ", device)
+#device = "cpu"
+#pdb.set_trace()
+if device!='cpu':
+    print("loading on GPU")
+    model = model.to(device)
+    print("cuda OK")
+
+from decord import VideoReader, cpu
 from huggingface_hub import hf_hub_download
 import os.path as osp
 import os
@@ -12,6 +22,7 @@ from glob import glob
 import pickle
 from transformers import logging
 logging.set_verbosity_error()
+import time
 import json
 import asyncio
 import pdb
@@ -23,12 +34,6 @@ parser.add_argument('--dir_out')
 args = parser.parse_args()
 
 feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-ssv2")
-model = VideoMAEForVideoClassification_my_model.from_pretrained("MCG-NJU/videomae-base-ssv2")
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print("Device : ", device)
-device = "cpu"
-#pdb.set_trace()
-#model = model.to(device)
 # assuming that the video is first resized and then cropped
 assert feature_extractor.do_resize == True
 #feature_extractor.do_center_crop = False
@@ -63,10 +68,17 @@ def get_feat(fp_video):
     # create a list of NumPy arrays
     video = [buffer[i] for i in range(buffer.shape[0])]
     inputs = feature_extractor(video, return_tensors="pt")
-    #inputs = inputs.to(device)
+    if device!='cpu':
+        inputs = inputs.to(device)
+    start = time.process_time()
     with torch.no_grad():
         feat = model(**inputs)
-    return feat
+    # your code here    
+    print(time.process_time() - start)
+    if device!='cpu':
+        return feat.detach().cpu()
+    else:
+        return feat
 
 # obtain original file paths
 #video_root = '/home/nawake/ssv2/dataset/videos'
@@ -84,12 +96,9 @@ skip_phrases = phrases[flag == 'None']
 import re
 skip_phrases = [re.findall('[A-Z][^A-Z]*', i) for i in skip_phrases]
 skip_phrases = [' '.join(item) for item in skip_phrases] 
-skip_phrases = [item.lower().capitalize()
-  for item in skip_phrases]
-skip_phrases = [item.replace('_',' ')
-  for item in skip_phrases]
-skip_phrases = [item.replace('  ',' ')
-  for item in skip_phrases]
+skip_phrases = [item.lower().capitalize() for item in skip_phrases]
+skip_phrases = [item.replace('_',' ') for item in skip_phrases]
+skip_phrases = [item.replace('  ',' ') for item in skip_phrases]
 #phrases = list(set(phrases))
 
 #skip_phrases = ['tilting''tipping','touching','trying','Tturning', 'uncovering','unfolding']
@@ -136,4 +145,4 @@ for video in tqdm.tqdm(fp_videos_multithread):
     else:
         print('file skipped:')
     print(out_name)
-    print('number of files wrote: '+str(len(os.listdir(dir_out))))
+    #print('number of files wrote: '+str(len(os.listdir(dir_out))))
