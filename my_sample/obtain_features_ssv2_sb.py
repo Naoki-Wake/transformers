@@ -136,6 +136,15 @@ for video, item_annotation in zip(fp_videos,str_annotations):
 import random
 random.shuffle(fp_videos_multithread)
 for video in tqdm.tqdm(fp_videos_multithread):
+#for video in tqdm.tqdm(fp_videos):
+#    if video == osp.join(video_root, '145274.webm'): and 14904.webm
+#        out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
+#        feat = get_feat(video)
+#        pdb.set_trace()
+#        np.save(out_name, feat.numpy())
+#        print('saved:')
+#    else:
+#        continue
     out_name = osp.join(dir_out, osp.basename(video).split('.')[0]+'.npy')
     #calculated_list = os.listdir(dir_out)
     if not os.path.exists(out_name):
