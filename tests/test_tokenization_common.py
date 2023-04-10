@@ -30,21 +30,25 @@ from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
+from huggingface_hub.file_download import http_get
 from parameterized import parameterized
 from requests.exceptions import HTTPError
+
 from transformers import (
     AlbertTokenizer,
     AlbertTokenizerFast,
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    GPT2TokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
+    is_flax_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -117,15 +121,17 @@ def merge_model_tokenizer_mappings(
             tokenizer = tokenizer_mapping[configuration][0]
             tokenizer_fast = tokenizer_mapping[configuration][1]
 
-            model_tokenizer_mapping.update({tokenizer: (configuration, model)})
+            if tokenizer is not None:
+                if configuration.__name__.startswith(tokenizer.__name__.replace("Tokenizer", "")):
+                    model_tokenizer_mapping.update({tokenizer: (configuration, model)})
             if tokenizer_fast is not None:
-                model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
+                if configuration.__name__.startswith(tokenizer_fast.__name__.replace("TokenizerFast", "")):
+                    model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 
 
 class TokenizerTesterMixin:
-
     tokenizer_class = None
     rust_tokenizer_class = None
     test_slow_tokenizer = True
@@ -378,6 +384,33 @@ class TokenizerTesterMixin:
             reverse_text = reverse_text.lower()
 
         self.assertEqual(reverse_text, text)
+
+        special_tokens = tokenizer.all_special_tokens
+        special_tokens_string = tokenizer.convert_tokens_to_string(special_tokens)
+        for special_token in special_tokens:
+            self.assertIn(special_token, special_tokens_string)
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = self.get_rust_tokenizer()
+            special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
+            self.assertEqual(special_tokens_string, special_tokens_string_rust)
+
+    def test_sentencepiece_tokenize_and_decode(self):
+        if not self.test_sentencepiece:
+            return
+
+        text = "This is text to test the tokenizer."
+        if self.test_rust_tokenizer:
+            tokenizer = self.get_tokenizer()
+            rust_tokenizer = self.get_rust_tokenizer()
+
+            slow_ids = tokenizer(text).input_ids
+            fast_ids = rust_tokenizer(text).input_ids
+            self.assertEqual(slow_ids, fast_ids)
+
+            slow_decoded = tokenizer.decode(slow_ids)
+            fast_decoded = rust_tokenizer.decode(slow_ids)
+            self.assertEqual(slow_decoded, fast_decoded)
 
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
@@ -882,7 +915,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 new_toks = [
                     AddedToken("[ABC]", normalized=False),
                     AddedToken("[DEF]", normalized=False),
@@ -920,7 +952,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if (
                     tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
                     and "token_type_ids" in tokenizer.model_input_names
@@ -971,7 +1002,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 seq_0 = "Test this method."
                 seq_1 = "With these inputs."
 
@@ -2107,7 +2137,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)  # , add_prefix_space=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if hasattr(tokenizer, "add_prefix_space") and not tokenizer.add_prefix_space:
                     continue
 
@@ -2340,7 +2369,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
                     return
 
@@ -2441,7 +2469,7 @@ class TokenizerTesterMixin:
                 batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
 
                 # TODO: add forward through JAX/Flax when PR is merged
-                # This is currently here to make flake8 happy !
+                # This is currently here to make ruff happy !
                 if encoded_sequence is None:
                     raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
 
@@ -2456,7 +2484,7 @@ class TokenizerTesterMixin:
                     )
 
                     # TODO: add forward through JAX/Flax when PR is merged
-                    # This is currently here to make flake8 happy !
+                    # This is currently here to make ruff happy !
                     if encoded_sequence_fast is None:
                         raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
 
@@ -2923,13 +2951,14 @@ class TokenizerTesterMixin:
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
-
                 if is_torch_available():
                     returned_tensor = "pt"
                 elif is_tf_available():
                     returned_tensor = "tf"
-                else:
+                elif is_flax_available():
                     returned_tensor = "jax"
+                else:
+                    return
 
                 if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
                     return
@@ -3544,7 +3573,6 @@ class TokenizerTesterMixin:
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
@@ -3867,6 +3895,51 @@ class TokenizerTesterMixin:
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
+    def test_clean_up_tokenization_spaces(self):
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        assert tokenizer.clean_up_tokenization_spaces is True
+
+        tokens = tokenizer.encode("This shouldn't be! He'll go.")
+        decoded = tokenizer.decode(tokens)
+        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
+
+        tokenizer.clean_up_tokenization_spaces = False
+        decoded = tokenizer.decode(tokens)
+        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
+        assert decoded == tokenizer.decode(tokens, clean_up_tokenization_spaces=False)
+
+        # Fast from slow
+        with tempfile.TemporaryDirectory() as tmp_dir_2:
+            tokenizer.save_pretrained(tmp_dir_2)
+            tokenizer_fast = BertTokenizerFast.from_pretrained(tmp_dir_2)
+            del tokenizer
+
+        assert tokenizer_fast.clean_up_tokenization_spaces is False
+        decoded = tokenizer_fast.decode(tokens)
+        # fast and slow don't have the same output when we don't cleanup
+        # tokenization space. Here `be!` vs `be !` and `go.` vs `go .`
+        assert decoded == "[CLS] this shouldn ' t be! he ' ll go. [SEP]"
+
+        tokenizer_fast.clean_up_tokenization_spaces = True
+        assert tokenizer_fast.clean_up_tokenization_spaces is True
+
+        decoded = tokenizer_fast.decode(tokens)
+        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
+
+        # Slow from fast
+        with tempfile.TemporaryDirectory() as tmp_dir_2:
+            tokenizer_fast.clean_up_tokenization_spaces = False
+            tokenizer_fast.save_pretrained(tmp_dir_2)
+            tokenizer = BertTokenizer.from_pretrained(tmp_dir_2)
+
+        assert tokenizer.clean_up_tokenization_spaces is False
+        decoded = tokenizer.decode(tokens)
+        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
+
+        tokenizer.clean_up_tokenization_spaces = True
+        decoded = tokenizer.decode(tokens)
+        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
+
 
 class TokenizerUtilTester(unittest.TestCase):
     def test_cached_files_are_used_when_internet_is_down(self):
@@ -3880,11 +3953,60 @@ class TokenizerUtilTester(unittest.TestCase):
         # Download this model to make sure it's in the cache.
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
-        # Under the mock environment we get a 500 error when trying to reach the model.
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
         with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    @require_tokenizers
+    def test_cached_files_are_used_when_internet_is_down_missing_files(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = {}
+        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
+
+        # Download this model to make sure it's in the cache.
+        _ = GPT2TokenizerFast.from_pretrained("gpt2")
+
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+            _ = GPT2TokenizerFast.from_pretrained("gpt2")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
+    def test_legacy_load_from_one_file(self):
+        # This test is for deprecated behavior and can be removed in v5
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get("https://huggingface.co/albert-base-v1/resolve/main/spiece.model", f)
+
+            _ = AlbertTokenizer.from_pretrained(tmp_file)
+        finally:
+            os.remove(tmp_file)
+
+        # Supporting this legacy load introduced a weird bug where the tokenizer would load local files if they are in
+        # the current folder and have the right name.
+        if os.path.isfile("tokenizer.json"):
+            # We skip the test if the user has a `tokenizer.json` in this folder to avoid deleting it.
+            return
+        try:
+            with open("tokenizer.json", "wb") as f:
+                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+            # The tiny random BERT has a vocab size of 1024, tiny gpt2 as a vocab size of 1000
+            self.assertEqual(tokenizer.vocab_size, 1000)
+            # Tokenizer should depend on the remote checkpoint, not the local tokenizer.json file.
+
+        finally:
+            os.remove("tokenizer.json")
+
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        _ = AlbertTokenizer.from_pretrained("https://huggingface.co/albert-base-v1/resolve/main/spiece.model")
 
 
 @is_staging_test
@@ -3894,7 +4016,6 @@ class TokenizerPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

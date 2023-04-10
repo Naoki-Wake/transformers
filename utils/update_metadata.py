@@ -15,15 +15,15 @@
 
 import argparse
 import collections
-import importlib.util
 import os
 import re
 import tempfile
 
 import pandas as pd
 from datasets import Dataset
-
 from huggingface_hub import Repository
+
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -32,12 +32,7 @@ TRANSFORMERS_PATH = "src/transformers"
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 # Regexes that match TF/Flax/PT model names.
@@ -58,6 +53,11 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
+    (
+        "zero-shot-object-detection",
+        "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES",
+        "AutoModelForZeroShotObjectDetection",
+    ),
     ("question-answering", "MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES", "AutoModelForQuestionAnswering"),
     ("text2text-generation", "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES", "AutoModelForSeq2SeqLM"),
     ("text-classification", "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForSequenceClassification"),
@@ -80,6 +80,24 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "AutoModelForAudioFrameClassification",
     ),
     ("audio-xvector", "MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "AutoModelForAudioXVector"),
+    (
+        "document-question-answering",
+        "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES",
+        "AutoModelForDocumentQuestionAnswering",
+    ),
+    (
+        "visual-question-answering",
+        "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
+        "AutoModelForVisualQuestionAnswering",
+    ),
+    ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    (
+        "zero-shot-image-classification",
+        "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
+        "AutoModelForZeroShotImageClassification",
+    ),
+    ("depth-estimation", "MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "AutoModelForDepthEstimation"),
+    ("video-classification", "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "AutoModelForVideoClassification"),
 ]
 
 
@@ -188,12 +206,10 @@ def update_pipeline_and_auto_class_table(table):
 
 def update_metadata(token, commit_sha):
     """
-    Update the metada for the Transformers repo.
+    Update the metadata for the Transformers repo.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
-        repo = Repository(
-            tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", use_auth_token=token
-        )
+        repo = Repository(tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", token=token)
 
         frameworks_table = get_frameworks_table()
         frameworks_dataset = Dataset.from_pandas(frameworks_table)
@@ -207,7 +223,7 @@ def update_metadata(token, commit_sha):
         table = update_pipeline_and_auto_class_table(table)
 
         # Sort the model classes to avoid some nondeterministic updates to create false update commits.
-        model_classes = sorted(list(table.keys()))
+        model_classes = sorted(table.keys())
         tags_table = pd.DataFrame(
             {
                 "model_class": model_classes,
@@ -231,10 +247,35 @@ def update_metadata(token, commit_sha):
             repo.push_to_hub(commit_message)
 
 
+def check_pipeline_tags():
+    in_table = {tag: cls for tag, _, cls in PIPELINE_TAGS_AND_AUTO_MODELS}
+    pipeline_tasks = transformers_module.pipelines.SUPPORTED_TASKS
+    missing = []
+    for key in pipeline_tasks:
+        if key not in in_table:
+            model = pipeline_tasks[key]["pt"]
+            if isinstance(model, (list, tuple)):
+                model = model[0]
+            model = model.__name__
+            if model not in in_table.values():
+                missing.append(key)
+
+    if len(missing) > 0:
+        msg = ", ".join(missing)
+        raise ValueError(
+            "The following pipeline tags are not present in the `PIPELINE_TAGS_AND_AUTO_MODELS` constant inside "
+            f"`utils/update_metadata.py`: {msg}. Please add them!"
+        )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", type=str, help="The token to use to push to the transformers-metadata dataset.")
     parser.add_argument("--commit_sha", type=str, help="The sha of the commit going with this update.")
+    parser.add_argument("--check-only", action="store_true", help="Activate to just check all pipelines are present.")
     args = parser.parse_args()
 
-    update_metadata(args.token, args.commit_sha)
+    if args.check_only:
+        check_pipeline_tags()
+    else:
+        update_metadata(args.token, args.commit_sha)

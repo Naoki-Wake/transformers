@@ -24,9 +24,10 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -194,9 +195,20 @@ class PegasusXModelTester:
 
 
 @require_torch
-class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXModel, PegasusXForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": PegasusXForConditionalGeneration,
+            "feature-extraction": PegasusXModel,
+            "summarization": PegasusXForConditionalGeneration,
+            "text2text-generation": PegasusXForConditionalGeneration,
+            "translation": PegasusXForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -205,6 +217,12 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = PegasusXModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PegasusXConfig)
+
+    @unittest.skip(
+        "`PegasusXGlobalLocalAttention` returns attentions as dictionary - not compatible with torchscript "
+    )
+    def test_torchscript_output_attentions(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -565,12 +583,13 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         inputs_dict = prepare_pegasus_x_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
-        expected_shape = torch.Size((1, 11, 1024))
+        expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[0.0702, -0.1552, 0.1192], [0.0836, -0.1848, 0.1304], [0.0673, -0.1686, 0.1045]], device=torch_device
         )
+
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
@@ -586,13 +605,13 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[0.0, 9.5705185, 1.5897303], [0.0, 9.833374, 1.5828674], [0.0, 10.429961, 1.5643371]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base").to(torch_device)
-        tok = PegasusTokenizer.from_pretrained("google/pegasus-x-large")
+        hf = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base-arxiv").to(torch_device)
+        tok = PegasusTokenizer.from_pretrained("google/pegasus-x-base")
 
         batch_input = [
             "While large pretrained Transformer models have proven highly capable at tackling natural language tasks,"
@@ -626,7 +645,8 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         )
 
         EXPECTED = [
-            "we investigate the performance of a new pretrained model for long input summarization. <n> the model"
+            "we investigate the performance of a new pretrained model for long input summarization. <n> the model is a"
+            " superposition of two well -"
         ]
 
         generated = tok.batch_decode(
